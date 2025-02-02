@@ -1,64 +1,83 @@
-const redux = require("redux");
-const createStore = redux.createStore;
-const combineReducers = redux.combineReducers;
+import { createStore, applyMiddleware } from "redux";
+import thunk from "redux-thunk";
+import axios from "axios";
+
+// Initial State
+const initialState = {
+  loading: false,
+  data: [],
+  error: "",
+};
 
 // Action Types
-const BUY_CAKE = "BUY_CAKE";
-const BUY_ICECREAM = "BUY_ICECREAM";
+const FETCH_USERS_REQUEST = "FETCH_USERS_REQUEST";
+const FETCH_USERS_SUCCESS = "FETCH_USERS_SUCCESS";
+const FETCH_USERS_FAILURE = "FETCH_USERS_FAILURE";
 
 // Action Creators
-function buyCake() {
-  return { type: BUY_CAKE };
-}
-
-function buyIcecream() {
-  return { type: BUY_ICECREAM };
-}
-
-// Initial States
-const initialCakeState = { numberOfCakes: 10 };
-const initialIcecreamState = { numberOfIcecreams: 15 };
-
-// Cake Reducer
-const cakeReducer = (state = initialCakeState, action) => {
-  switch (action.type) {
-    case BUY_CAKE:
-      return { ...state, numberOfCakes: state.numberOfCakes - 1 };
-    default:
-      return state;
-  }
-};
-
-// Ice Cream Reducer
-const iceCreamReducer = (state = initialIcecreamState, action) => {
-  switch (action.type) {
-    case BUY_ICECREAM:
-      return { ...state, numberOfIcecreams: state.numberOfIcecreams - 1 };
-    default:
-      return state;
-  }
-};
-
-// Combine Reducers
-const rootReducer = combineReducers({
-  cake: cakeReducer,
-  iceCream: iceCreamReducer,
+const fetchUsersRequest = () => ({ type: FETCH_USERS_REQUEST });
+const fetchUsersSuccess = (users) => ({
+  type: FETCH_USERS_SUCCESS,
+  payload: users,
+});
+const fetchUsersFailure = (error) => ({
+  type: FETCH_USERS_FAILURE,
+  payload: error,
 });
 
-// Create Store
-const store = createStore(rootReducer);
-console.log("Initial State", store.getState());
+// Reducer
+const reducer = (state = initialState, action) => {
+  switch (action.type) {
+    case FETCH_USERS_REQUEST:
+      return { ...state, loading: true };
+    case FETCH_USERS_SUCCESS:
+      return { loading: false, data: action.payload, error: "" };
+    case FETCH_USERS_FAILURE:
+      return { loading: false, data: [], error: action.payload };
+    default:
+      return state;
+  }
+};
 
-// Subscribe to state changes
-const unsubscribe = store.subscribe(() =>
-  console.log("Updated State", store.getState())
-);
+// Async Action Creator (Thunk)
+export const fetchUser = () => {
+  return function (dispatch) {
+    dispatch(fetchUsersRequest());
+    axios
+      .get("https://jsonplaceholder.typicode.com/users")
+      .then((response) => {
+        const users = response.data.map((user) => user.name); // Extract names
+        dispatch(fetchUsersSuccess(users));
+        renderUsers(); // Update UI
+      })
+      .catch((error) => {
+        dispatch(fetchUsersFailure(error.message));
+        renderUsers(); // Show error message
+      });
+  };
+};
 
-// Dispatch Actions
+// Create Redux Store
+export const store = createStore(reducer, applyMiddleware(thunk));
 
-store.dispatch(buyCake());
-store.dispatch(buyCake());
-store.dispatch(buyIcecream());
-store.dispatch(buyIcecream());
+// Function to Update UI
+const renderUsers = () => {
+  const state = store.getState();
+  const userList = document.getElementById("user-list");
+  userList.innerHTML = ""; // Clear previous content
 
-unsubscribe();
+  if (state.loading) {
+    userList.innerHTML = "<li>Loading...</li>";
+  } else if (state.error) {
+    userList.innerHTML = `<li style="color: red;">Error: ${state.error}</li>`;
+  } else {
+    state.data.forEach((user) => {
+      const li = document.createElement("li");
+      li.textContent = user;
+      userList.appendChild(li);
+    });
+  }
+};
+
+// Subscribe to Store Changes
+store.subscribe(renderUsers);
